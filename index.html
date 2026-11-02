@@ -5,30 +5,25 @@
     <title>Fotos Georreferenciadas - Granizo 2026</title>
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
     <style>
-        body { margin: 0; padding: 0; }
+        body { margin: 0; padding: 0; font-family: Arial, sans-serif; }
         #map { height: 100vh; width: 100%; }
         
-        /* Estilos para la ventana emergente (popup) */
+        /* --- Estilos del Popup --- */
         .popup-img {
             width: 100%;
             max-width: 300px; 
             height: auto;
             display: block;
-            transition: transform 0.3s ease; /* Animación suave al rotar */
+            transition: transform 0.3s ease; 
             margin-bottom: 5px;
+            cursor: pointer;
         }
         
-        /* Clase que aplica la rotación */
-        .rotar-90 {
-            transform: rotate(90deg) scale(0.75); /* scale 0.75 es para que no se salga del popup al rotar */
-        }
-
-        /* Botón de rotar */
         .btn-rotar {
             background-color: #0078A8;
             color: white;
             border: none;
-            padding: 5px 10px;
+            padding: 6px 10px;
             border-radius: 4px;
             cursor: pointer;
             font-size: 12px;
@@ -36,49 +31,121 @@
             margin-top: 5px;
         }
         .btn-rotar:hover { background-color: #005f85; }
+
+        /* --- Estilos del Lightbox (Imagen agrandada) --- */
+        #lightbox {
+            display: none;
+            position: fixed;
+            z-index: 9999;
+            left: 0;
+            top: 0;
+            width: 100%;
+            height: 100%;
+            background-color: rgba(0, 0, 0, 0.85);
+            justify-content: center;
+            align-items: center;
+            flex-direction: column;
+        }
+
+        #lightbox-img {
+            max-width: 90%;
+            max-height: 85vh;
+            object-fit: contain;
+            transition: transform 0.3s ease;
+        }
+
+        .cerrar-lightbox {
+            position: absolute;
+            top: 20px;
+            right: 30px;
+            color: white;
+            font-size: 40px;
+            font-weight: bold;
+            cursor: pointer;
+        }
+        .cerrar-lightbox:hover { color: #ccc; }
+
+        .btn-rotar-grande {
+            margin-top: 15px;
+            background-color: #0078A8;
+            color: white;
+            border: none;
+            padding: 10px 20px;
+            border-radius: 5px;
+            cursor: pointer;
+            font-size: 16px;
+        }
     </style>
 </head>
 <body>
     <div id="map"></div>
+
+    <div id="lightbox">
+        <span class="cerrar-lightbox" onclick="cerrarLightbox()">&times;</span>
+        <img id="lightbox-img" src="" alt="Foto ampliada">
+        <button class="btn-rotar-grande" onclick="rotarLightbox()">Rotar 90°</button>
+    </div>
     
     <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
     
     <script>
-        // 1. Inicializar el mapa (centrado en Argentina aproximado, se ajustará al cargar los puntos)
         var map = L.map('map').setView([-34.6, -58.4], 8); 
 
-        L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-            attribution: '© OpenStreetMap'
+        // --- CAMBIO A GOOGLE HÍBRIDO ---
+        // Usamos la URL de tiles de Google con "lyrs=s,h" para satélite + etiquetas
+        L.tileLayer('http://{s}.google.com/vt/lyrs=s,h&x={x}&y={y}&z={z}', {
+            maxZoom: 20,
+            subdomains: ['mt0', 'mt1', 'mt2', 'mt3'],
+            attribution: '© Google Maps'
         }).addTo(map);
 
-        // 2. Función para abrir y rotar la imagen
-        window.rotarImagen = function(idImagen) {
+        var gradosPopup = 0;
+        var gradosLightbox = 0;
+
+        window.rotarPopup = function(idImagen) {
+            gradosPopup = (gradosPopup + 90) % 360;
             var img = document.getElementById(idImagen);
             if (img) {
-                img.classList.toggle('rotar-90');
+                img.style.transform = `rotate(${gradosPopup}deg) scale(${gradosPopup % 180 !== 0 ? 0.75 : 1})`;
             }
         };
 
-        // 3. Cargar el GeoJSON
+        window.abrirLightbox = function(rutaFoto) {
+            document.getElementById('lightbox-img').src = rutaFoto;
+            gradosLightbox = 0;
+            document.getElementById('lightbox-img').style.transform = 'rotate(0deg)';
+            document.getElementById('lightbox').style.display = 'flex';
+        };
+
+        window.cerrarLightbox = function() {
+            document.getElementById('lightbox').style.display = 'none';
+        };
+
+        window.rotarLightbox = function() {
+            gradosLightbox = (gradosLightbox + 90) % 360;
+            document.getElementById('lightbox-img').style.transform = `rotate(${gradosLightbox}deg)`;
+        };
+
+        document.getElementById('lightbox').addEventListener('click', function(e) {
+            if (e.target === this) {
+                cerrarLightbox();
+            }
+        });
+
         fetch('puntos.geojson')
             .then(response => response.json())
             .then(data => {
                 var capaGeoJSON = L.geoJSON(data, {
                     onEachFeature: function (feature, layer) {
-                        // Tomamos el campo 'filename' de QGIS
                         var nombreBase = feature.properties.filename;
-                        
-                        // Armamos la ruta a la foto en JPG
                         var rutaFoto = 'fotos_web/' + nombreBase + '.jpg';
-                        
-                        // ID único para la imagen en este popup
                         var idImagen = 'img_' + feature.properties.fid;
 
-                        // Contenido del popup con la imagen y el botón de rotar
                         var popupContent = `
                             <div>
-                                <img src="${rutaFoto}" id="${idImagen}" class="popup-img" alt="Foto">
-                                <button class="btn-rotar" onclick="rotarImagen('${idImagen}')">Rotar 90°</button>
+                                <img src="${rutaFoto}" id="${idImagen}" class="popup-img" 
+                                     onclick="abrirLightbox('${rutaFoto}')" alt="Foto">
+                                <button class="btn-rotar" onclick="event.stopPropagation(); rotarPopup('${idImagen}')">Rotar 90°</button>
                                 <br><small style="color: gray;">${nombreBase}</small>
                             </div>
                         `;
@@ -87,7 +154,6 @@
                     }
                 }).addTo(map);
 
-                // 4. Hacer zoom automático para que se vean todos los puntos cargados
                 if (data.features.length > 0) {
                     map.fitBounds(capaGeoJSON.getBounds());
                 }
