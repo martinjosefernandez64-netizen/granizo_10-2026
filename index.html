@@ -1,0 +1,98 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="utf-8" />
+    <title>Fotos Georreferenciadas - Granizo 2026</title>
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+    <style>
+        body { margin: 0; padding: 0; }
+        #map { height: 100vh; width: 100%; }
+        
+        /* Estilos para la ventana emergente (popup) */
+        .popup-img {
+            width: 100%;
+            max-width: 300px; 
+            height: auto;
+            display: block;
+            transition: transform 0.3s ease; /* Animación suave al rotar */
+            margin-bottom: 5px;
+        }
+        
+        /* Clase que aplica la rotación */
+        .rotar-90 {
+            transform: rotate(90deg) scale(0.75); /* scale 0.75 es para que no se salga del popup al rotar */
+        }
+
+        /* Botón de rotar */
+        .btn-rotar {
+            background-color: #0078A8;
+            color: white;
+            border: none;
+            padding: 5px 10px;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 12px;
+            width: 100%;
+            margin-top: 5px;
+        }
+        .btn-rotar:hover { background-color: #005f85; }
+    </style>
+</head>
+<body>
+    <div id="map"></div>
+    
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+    
+    <script>
+        // 1. Inicializar el mapa (centrado en Argentina aproximado, se ajustará al cargar los puntos)
+        var map = L.map('map').setView([-34.6, -58.4], 8); 
+
+        L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+            attribution: '© OpenStreetMap'
+        }).addTo(map);
+
+        // 2. Función para abrir y rotar la imagen
+        window.rotarImagen = function(idImagen) {
+            var img = document.getElementById(idImagen);
+            if (img) {
+                img.classList.toggle('rotar-90');
+            }
+        };
+
+        // 3. Cargar el GeoJSON
+        fetch('puntos.geojson')
+            .then(response => response.json())
+            .then(data => {
+                var capaGeoJSON = L.geoJSON(data, {
+                    onEachFeature: function (feature, layer) {
+                        // Tomamos el campo 'filename' de QGIS
+                        var nombreBase = feature.properties.filename;
+                        
+                        // Armamos la ruta a la foto en JPG
+                        var rutaFoto = 'fotos_web/' + nombreBase + '.jpg';
+                        
+                        // ID único para la imagen en este popup
+                        var idImagen = 'img_' + feature.properties.fid;
+
+                        // Contenido del popup con la imagen y el botón de rotar
+                        var popupContent = `
+                            <div>
+                                <img src="${rutaFoto}" id="${idImagen}" class="popup-img" alt="Foto">
+                                <button class="btn-rotar" onclick="rotarImagen('${idImagen}')">Rotar 90°</button>
+                                <br><small style="color: gray;">${nombreBase}</small>
+                            </div>
+                        `;
+                        
+                        layer.bindPopup(popupContent);
+                    }
+                }).addTo(map);
+
+                // 4. Hacer zoom automático para que se vean todos los puntos cargados
+                if (data.features.length > 0) {
+                    map.fitBounds(capaGeoJSON.getBounds());
+                }
+            })
+            .catch(error => console.error('Error cargando el GeoJSON:', error));
+    </script>
+</body>
+</html>
